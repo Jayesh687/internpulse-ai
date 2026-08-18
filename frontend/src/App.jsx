@@ -6,10 +6,12 @@ import InternshipDiscovery from './components/InternshipDiscovery';
 import ApplicationAssistant from './components/ApplicationAssistant';
 import ApplicationTracker from './components/ApplicationTracker';
 import InterviewPrep from './components/InterviewPrep';
+import AuthPage from './components/AuthPage';
 
 import { profileApi, internshipsApi, applicationsApi } from './api/client';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [profile, setProfile] = useState(null);
   const [matchedJobs, setMatchedJobs] = useState([]);
@@ -53,8 +55,21 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    if (isAuthenticated) {
+      loadInitialData();
+    }
+  }, [isAuthenticated]);
+
+  const handleAuth = (user) => {
+    setProfile((prev) => ({
+      ...(prev || {}),
+      name: user.name || prev?.name || 'Jayesh',
+      email: user.email || prev?.email || 'jayesh@university.edu',
+      skills: prev?.skills || ['Python', 'Java', 'SQL', 'React']
+    }));
+    setIsAuthenticated(true);
+    notify('Welcome back, ' + (user.name || 'Jayesh') + '!', 'success');
+  };
 
   const handlePerformSearch = async () => {
     try {
@@ -90,6 +105,10 @@ export default function App() {
     setSelectedJob(job);
     setActiveTab('interview');
   };
+
+  if (!isAuthenticated) {
+    return <AuthPage onAuth={handleAuth} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0b0f19] text-slate-100">
