@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InternPulse AI — Autonomous Internship Copilot & Application Suite</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+              950: '#0f1026',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18, ReactDOM, Babel, Axios, Canvas Confetti -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f19;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.10) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: #f1f5f9;
+    }
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0b0f19; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
+</head>
+<body class="selection:bg-indigo-500 selection:text-white">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- API HELPER ---
+    const api = axios.create({ baseURL: '/api' });
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [profile, setProfile] = useState(null);
+      const [matchedJobs, setMatchedJobs] = useState([]);
+      const [allJobs, setAllJobs] = useState([]);
+      const [applications, setApplications] = useState([]);
+      const [selectedJob, setSelectedJob] = useState(null);
+      const [notification, setNotification] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      const [searchParams, setSearchParams] = useState({
+        query: '',
+        role: 'all',
+        work_mode: 'all'
+      });
+
+      const notify = (message, type = 'info') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3500);
+      };
+
+      const loadData = async () => {
+        try {
+          const p = (await api.get('/profile')).data;
+          setProfile(p);
+          const matches = (await api.get('/internships/matched')).data;
+          setMatchedJobs(matches);
+          const raw = (await api.get('/internships')).data;
+          setAllJobs(raw);
+          const apps = (await api.get('/applications')).data;
+          setApplications(apps);
+          if (matches.length > 0) setSelectedJob(matches[0].internship);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      useEffect(() => { loadData(); }, []);
+
+      const handleSearch = async () => {
+        try {
+          const res = (await api.get('/internships/matched', {
+            params: {
+              query: searchParams.query,
+              role: searchParams.role,
+              work_mode: searchParams.work_mode
+            }
+          })).data;
+          setMatchedJobs(res);
+          notify(`Found ${res.length} matched internships!`, 'success');
+        } catch (err) {
+          notify('Search failed: ' + err.message, 'error');
+        }
+      };
+
+      const handleSaveJob = async (job) => {
+        try {
+          await api.post('/applications', { internship_id: job.id, status: 'saved' });
+          const apps = (await api.get('/applications')).data;
+          setApplications(apps);
+          notify(`Saved ${job.company} to Kanban Tracker!`, 'success');
+          confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
+        } catch (err) {
+          notify('Error saving: ' + err.message, 'error');
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Notification Toast */}
+          {notification && (
+            <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+              <div className={`px-4 py-3 rounded-2xl shadow-2xl border text-xs font-bold flex items-center gap-2 ${
+                notification.type === 'success' ? 'bg-emerald-950/95 text-emerald-300 border-emerald-500/40' :
+                notification.type === 'error' ? 'bg-rose-950/95 text-rose-300 border-rose-500/40' :
+                'bg-indigo-950/95 text-indigo-300 border-indigo-500/40'
+              }`}>
+                <span>●</span> {notification.message}
+              </div>
+            </div>
+          )}
+
+          {/* Top Navbar */}
+          <header className="sticky top-0 z-40 glass-panel border-b border-slate-800/80 bg-slate-950/85">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25 text-lg">
+                  ⚡
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                      InternPulse AI
+                    </span>
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                      v2.0 Agent
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium">Autonomous Internship Copilot</p>
+                </div>
+              </div>
+
+              {/* Nav Tabs */}
+              <nav className="hidden md:flex items-center gap-1.5">
+                {[
+                  { id: 'dashboard', label: '🧭 Dashboard' },
+                  { id: 'profile', label: '📄 Resume & Profile' },
+                  { id: 'discovery', label: '✨ Discover & Match' },
+                  { id: 'assistant', label: '🚀 Application Tailor' },
+                  { id: 'tracker', label: '📋 Kanban Tracker' },
+                  { id: 'interview', label: '🎙️ Mock Interview' },
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+                      activeTab === t.id
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Profile Pill */}
+              <div 
+                onClick={() => setActiveTab('profile')}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-xs text-white">
+                  {profile?.name ? profile.name.charAt(0) : 'A'}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <div className="text-xs font-bold text-slate-200">{profile?.name || 'Jayesh'}</div>
+                  <div className="text-[10px] text-emerald-400 font-semibold">● Agent Synced</div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Body */}
+          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+            {activeTab === 'dashboard' && (
+              <DashboardView 
+                profile={profile}
+                matchedJobs={matchedJobs}
+                applications={applications}
+                setActiveTab={setActiveTab}
+                setSelectedJob={setSelectedJob}
+              />
+            )}
+
+            {activeTab === 'profile' && (
+              <ProfileView 
+                profile={profile}
+                onRefresh={loadData}
+                notify={notify}
+              />
+            )}
+
+            {activeTab === 'discovery' && (
+              <DiscoveryView
+                matchedJobs={matchedJobs}
+                searchParams={searchParams}
+                setSearchParams={setSearchParams}
+                onSearch={handleSearch}
+                onSaveJob={handleSaveJob}
+                onTailorJob={(job) => {
+                  setSelectedJob(job);
+                  setActiveTab('assistant');
+                }}
+              />
+            )}
+
+            {activeTab === 'assistant' && (
+              <AssistantView
+                selectedJob={selectedJob}
+                allJobs={allJobs}
+                setSelectedJob={setSelectedJob}
+                profile={profile}
+                notify={notify}
+                onSaveJob={handleSaveJob}
+              />
+            )}
+
+            {activeTab === 'tracker' && (
+              <TrackerView
+                applications={applications}
+                onRefresh={loadData}
+                notify={notify}
+                onPrepInterview={(job) => {
+                  setSelectedJob(job);
+                  setActiveTab('interview');
+                }}
+                onTailorJob={(job) => {
+                  setSelectedJob(job);
+                  setActiveTab('assistant');
+                }}
+              />
+            )}
+
+            {activeTab === 'interview' && (
+              <InterviewView
+                selectedJob={selectedJob}
+                allJobs={allJobs}
+                setSelectedJob={setSelectedJob}
+                profile={profile}
+                notify={notify}
+              />
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // --- 1. DASHBOARD VIEW ---
+    function DashboardView({ profile, matchedJobs, applications, setActiveTab, setSelectedJob }) {
+      const avgScore = matchedJobs?.length 
+        ? Math.round(matchedJobs.slice(0, 5).reduce((a, c) => a + c.match_score, 0) / Math.min(5, matchedJobs.length))
+        : 88;
+
+      return (
+        <div className="space-y-8">
+          {/* Welcome Hero */}
+          <div className="relative overflow-hidden rounded-3xl glass-panel p-8 border border-indigo-500/20 bg-gradient-to-br from-indigo-950/40 via-slate-900/80 to-slate-950">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+              <div className="space-y-3 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-bold text-indigo-400">
+                  ⚡ Autonomous AI Agent Active
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-white">
+                  Welcome, <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">{profile?.name || 'Student'}</span>!
+                </h1>
+                <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                  Your profile is indexed across <strong className="text-white">{matchedJobs.length} verified 2026 tech internships</strong> (Google, OpenAI, Stripe, Microsoft, Startups). 
+                  The agent has analyzed your skills and is ready to tailor your application materials.
+                </p>
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <button
+                    onClick={() => setActiveTab('discovery')}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5"
+                  >
+                    ✨ Explore Matched Internships
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('profile')}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs transition"
+                  >
+                    📄 Upload / Edit Resume
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 text-center min-w-[200px]">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">Top Match Fit</div>
+                <div className="text-4xl font-extrabold text-indigo-400">{avgScore}%</div>
+                <div className="text-xs text-emerald-400 font-bold mt-1">High Compatibility</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="glass-panel p-5 rounded-2xl border border-slate-800">
+              <div className="text-xs text-slate-400 font-semibold mb-1">Saved Roles</div>
+              <div className="text-2xl font-bold text-white">{applications.filter(a => a.status === 'saved').length}</div>
+            </div>
+            <div className="glass-panel p-5 rounded-2xl border border-slate-800">
+              <div className="text-xs text-sky-400 font-semibold mb-1">Applied</div>
+              <div className="text-2xl font-bold text-white">{applications.filter(a => a.status === 'applied').length}</div>
+            </div>
+            <div className="glass-panel p-5 rounded-2xl border border-slate-800">
+              <div className="text-xs text-amber-400 font-semibold mb-1">Interviews</div>
+              <div className="text-2xl font-bold text-white">{applications.filter(a => a.status === 'interview').length}</div>
+            </div>
+            <div className="glass-panel p-5 rounded-2xl border border-slate-800">
+              <div className="text-xs text-emerald-400 font-semibold mb-1">Offers / Selected</div>
+              <div className="text-2xl font-bold text-white">{applications.filter(a => a.status === 'selected').length}</div>
+            </div>
+          </div>
+
+          {/* Top Recommendations */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">✨ Top AI Recommended Roles</h2>
+              <button onClick={() => setActiveTab('discovery')} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold">
+                View All ({matchedJobs.length}) →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {matchedJobs.slice(0, 3).map((match, idx) => (
+                <div key={idx} className="glass-panel p-5 rounded-2xl border border-slate-800 hover:border-indigo-500/40 transition flex flex-col justify-between space-y-4">
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-sm text-white line-clamp-1">{match.internship.title}</h3>
+                        <div className="text-xs text-slate-400 font-medium">{match.internship.company}</div>
+                      </div>
+                      <div className="px-2 py-1 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-bold text-xs">
+                        {Math.round(match.match_score)}%
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-300">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800">{match.internship.stipend}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800">{match.internship.location}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 line-clamp-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      💡 {match.match_reasons[0] || 'Matches student tech stack.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedJob(match.internship);
+                      setActiveTab('assistant');
+                    }}
+                    className="w-full py-2 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 font-bold text-xs border border-indigo-500/30 transition"
+                  >
+                    Tailor Application →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 2. PROFILE & RESUME VIEW ---
+    function ProfileView({ profile, onRefresh, notify }) {
+      const [formData, setFormData] = useState(profile || {});
+      const [newSkill, setNewSkill] = useState('');
+      const [isUploading, setIsUploading] = useState(false);
+
+      useEffect(() => { if (profile) setFormData(profile); }, [profile]);
+
+      const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setIsUploading(true);
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          const res = (await api.post('/profile/upload-resume', form)).data;
+          notify('Resume parsed & skills synced!', 'success');
+          onRefresh();
+        } catch (err) {
+          notify('Upload failed: ' + err.message, 'error');
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      const handleSave = async () => {
+        try {
+          await api.put('/profile', formData);
+          notify('Profile saved successfully!', 'success');
+          onRefresh();
+        } catch (err) {
+          notify('Save error: ' + err.message, 'error');
+        }
+      };
+
+      const addSkill = () => {
+        if (!newSkill.trim()) return;
+        if (!formData.skills.includes(newSkill.trim())) {
+          setFormData({ ...formData, skills: [...formData.skills, newSkill.trim()] });
+        }
+        setNewSkill('');
+      };
+
+      const removeSkill = (s) => {
+        setFormData({ ...formData, skills: formData.skills.filter(x => x !== s) });
+      };
+
+      return (
+        <div className="space-y-6 max-w-5xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Student Profile & Resume Analysis</h1>
+              <p className="text-xs text-slate-400">Extract skills from your resume and customize your preferences.</p>
+            </div>
+            <button
+              onClick={handleSave}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-600/30"
+            >
+              Save Profile
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Upload Box */}
+            <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+              <h2 className="text-sm font-bold text-white">Upload Resume (PDF / DOCX)</h2>
+              <label className="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition bg-slate-900/50">
+                <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleFileUpload} className="hidden" />
+                <div className="text-3xl mb-2">{isUploading ? '⏳' : '📁'}</div>
+                <div className="text-xs font-bold text-white text-center">
+                  {isUploading ? 'Extracting Entities...' : 'Click to Upload Resume'}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">PDF or DOCX format</div>
+              </label>
+
+              <div className="p-3.5 rounded-2xl bg-indigo-950/30 border border-indigo-500/20 text-[11px] text-slate-300 space-y-1">
+                <strong className="text-indigo-400">Zero-Hallucination Guarantee:</strong> The agent strictly parses your actual projects and experience without inventing skills.
+              </div>
+            </div>
+
+            {/* Profile Form */}
+            <div className="md:col-span-2 glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+              <h2 className="text-sm font-bold text-white">Academic & Contact Information</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-slate-400 font-semibold mb-1 block">Full Name</label>
+                  <input
+                    type="text"
+                    value={formData.name || ''}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 font-semibold mb-1 block">Degree & Major</label>
+                  <input
+                    type="text"
+                    value={formData.degree || ''}
+                    onChange={e => setFormData({ ...formData, degree: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 font-semibold mb-1 block">Graduation Year</label>
+                  <input
+                    type="number"
+                    value={formData.graduation_year || 2026}
+                    onChange={e => setFormData({ ...formData, graduation_year: parseInt(e.target.value) || 2026 })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 font-semibold mb-1 block">Work Mode Preference</label>
+                  <select
+                    value={formData.remote_preference || 'remote_ok'}
+                    onChange={e => setFormData({ ...formData, remote_preference: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                  >
+                    <option value="remote_ok">Flexible (Remote or On-site)</option>
+                    <option value="remote_only">Remote Only</option>
+                    <option value="onsite_only">On-site Only</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Skills Tag Cloud */}
+              <div className="space-y-2 pt-3 border-t border-slate-800">
+                <label className="text-xs font-bold text-white block">Verified Skills ({formData.skills?.length || 0})</label>
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
+                  {formData.skills?.map((s, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-medium">
+                      {s}
+                      <button onClick={() => removeSkill(s)} className="text-slate-400 hover:text-white">×</button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSkill}
+                    onChange={e => setNewSkill(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addSkill()}
+                    placeholder="Add skill (e.g. PyTorch, React, Docker)..."
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs"
+                  />
+                  <button onClick={addSkill} className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold">
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 3. DISCOVERY & MATCHING VIEW ---
+    function DiscoveryView({ matchedJobs, searchParams, setSearchParams, onSearch, onSaveJob, onTailorJob }) {
+      const [modalMatch, setModalMatch] = useState(null);
+
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">✨ Internship Discovery & AI Compatibility Engine</h1>
+            <p className="text-xs text-slate-400">Discover live official postings with transparent AI match score breakdowns.</p>
+          </div>
+
+          {/* Search Controls */}
+          <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={searchParams.query}
+              onChange={e => setSearchParams({ ...searchParams, query: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && onSearch()}
+              placeholder="Search by role, company, or tech stack..."
+              className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100"
+            />
+            <button
+              onClick={onSearch}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition"
+            >
+              Search Roles
+            </button>
+          </div>
+
+          {/* Grid of Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {matchedJobs.map((match, idx) => {
+              const job = match.internship;
+              const score = Math.round(match.match_score);
+              return (
+                <div key={idx} className="glass-panel p-5 rounded-3xl border border-slate-800 hover:border-indigo-500/40 transition flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-sm text-white line-clamp-1">{job.title}</h3>
+                        <div className="text-xs text-indigo-400 font-semibold">{job.company}</div>
+                      </div>
+                      <div className="px-2.5 py-1 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-bold text-xs flex-shrink-0">
+                        {score}% Match
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-300">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800">💰 {job.stipend}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800">📍 {job.location}</span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
+                      <strong className="text-indigo-400">Match Reason: </strong>
+                      {match.match_reasons[0] || 'Strong alignment with your profile.'}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Requirements:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {job.requirements?.slice(0, 4).map((r, rIdx) => (
+                          <span key={rIdx} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800 space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onTailorJob(job)}
+                        className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition"
+                      >
+                        Tailor Application
+                      </button>
+                      <button
+                        onClick={() => onSaveJob(job)}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
+                        title="Save to Tracker"
+                      >
+                        📌
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <button onClick={() => setModalMatch(match)} className="text-indigo-400 hover:text-indigo-300 font-semibold">
+                        Deep Match Analysis →
+                      </button>
+                      <a href={job.application_url} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-slate-200">
+                        Official Link ↗
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Deep Match Modal */}
+          {modalMatch && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="glass-panel w-full max-w-xl rounded-3xl p-6 border border-slate-700 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-xs text-indigo-400 font-bold">{modalMatch.internship.company}</div>
+                    <h2 className="text-lg font-bold text-white">{modalMatch.internship.title}</h2>
+                    <div className="text-xs text-emerald-400 font-semibold mt-0.5">{modalMatch.fit_verdict}</div>
+                  </div>
+                  <button onClick={() => setModalMatch(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
+                  <div className="font-bold text-white">Score Breakdown:</div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Technical Skills (40%)</span>
+                    <span className="font-bold text-indigo-400">{modalMatch.breakdown.skills_score}%</span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Projects Relevance (30%)</span>
+                    <span className="font-bold text-indigo-400">{modalMatch.breakdown.projects_score}%</span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Preferences (15%)</span>
+                    <span className="font-bold text-indigo-400">{modalMatch.breakdown.preference_score}%</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30">
+                    <div className="font-bold text-emerald-400 mb-1">Matched Skills</div>
+                    <div className="text-[11px] text-slate-300">{modalMatch.matched_skills?.join(', ') || 'General fundamentals'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/30">
+                    <div className="font-bold text-amber-400 mb-1">Missing / Gap Tech</div>
+                    <div className="text-[11px] text-slate-300">{modalMatch.missing_skills?.join(', ') || 'None! Excellent fit.'}</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const j = modalMatch.internship;
+                    setModalMatch(null);
+                    onTailorJob(j);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
+                >
+                  Tailor Application for This Role →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- 4. APPLICATION ASSISTANT STUDIO ---
+    function AssistantView({ selectedJob, allJobs, setSelectedJob, profile, notify, onSaveJob }) {
+      const [activeTab, setActiveTab] = useState('cover_letter');
+      const [isGenerating, setIsGenerating] = useState(false);
+      const [tailoredData, setTailoredData] = useState(null);
+      const [customQ, setCustomQ] = useState('');
+
+      const generateMaterials = async (q = "") => {
+        if (!selectedJob) return;
+        setIsGenerating(true);
+        try {
+          const res = (await api.post('/applications/tailor', {
+            internship_id: selectedJob.id,
+            custom_question_prompt: q || customQ
+          })).data;
+          setTailoredData(res);
+          notify('Tailored application ready!', 'success');
+        } catch (err) {
+          notify('Error: ' + err.message, 'error');
+        } finally {
+          setIsGenerating(false);
+        }
+      };
+
+      useEffect(() => {
+        if (selectedJob) generateMaterials();
+      }, [selectedJob?.id]);
+
+      if (!selectedJob) return <div className="p-12 text-center text-slate-400">Select an internship to begin tailoring.</div>;
+
+      return (
+        <div className="space-y-6 max-w-6xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">🚀 AI Application Assistant Studio</h1>
+              <p className="text-xs text-slate-400">Generates truthful, grounded cover letters, answers, and resume bullet suggestions.</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedJob.id}
+                onChange={e => {
+                  const j = allJobs.find(x => x.id === parseInt(e.target.value));
+                  if (j) setSelectedJob(j);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-200"
+              >
+                {allJobs.map(j => (
+                  <option key={j.id} value={j.id}>{j.company} — {j.title}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => onSaveJob(selectedJob)}
+                className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Col: Job Summary & Custom Q */}
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <div className="space-y-1">
+                <div className="text-xs text-indigo-400 font-bold">{selectedJob.company}</div>
+                <h3 className="text-base font-bold text-white">{selectedJob.title}</h3>
+                <div className="text-xs text-slate-400">{selectedJob.location} • {selectedJob.stipend}</div>
+              </div>
+
+              <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="text-[11px] font-bold text-slate-400 uppercase">Target Requirements:</div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedJob.requirements?.map((r, idx) => (
+                    <span key={idx} className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-950/40 border border-indigo-500/20 text-indigo-300">
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <label className="text-xs font-bold text-white block">Custom Portal Question</label>
+                <textarea
+                  value={customQ}
+                  onChange={e => setCustomQ(e.target.value)}
+                  placeholder="e.g. Why are you passionate about fintech, or Describe a technical challenge you overcame..."
+                  rows={3}
+                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100"
+                />
+                <button
+                  onClick={() => generateMaterials(customQ)}
+                  disabled={isGenerating || !customQ.trim()}
+                  className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs"
+                >
+                  Generate Custom Answer
+                </button>
+              </div>
+            </div>
+
+            {/* Right 2-Cols: Output */}
+            <div className="lg:col-span-2 glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+              <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+                {[
+                  { id: 'cover_letter', label: 'Cover Letter' },
+                  { id: 'why_hire_me', label: 'Why Hire Me?' },
+                  { id: 'why_company', label: `Why ${selectedJob.company}?` },
+                  { id: 'resume_tweaks', label: 'Resume Bullet Optimizer' },
+                  { id: 'custom_answers', label: 'Custom Answers' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      activeTab === tab.id
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {isGenerating ? (
+                <div className="py-16 text-center text-xs text-indigo-400 font-bold">
+                  Synthesizing personalized application documents with zero-hallucination grounding...
+                </div>
+              ) : tailoredData ? (
+                <div className="space-y-3">
+                  {activeTab === 'cover_letter' && (
+                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-xs leading-relaxed font-mono whitespace-pre-wrap text-slate-200">
+                      {tailoredData.cover_letter}
+                    </div>
+                  )}
+
+                  {activeTab === 'why_hire_me' && (
+                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-xs leading-relaxed text-slate-200">
+                      {tailoredData.why_hire_me}
+                    </div>
+                  )}
+
+                  {activeTab === 'why_company' && (
+                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-xs leading-relaxed text-slate-200">
+                      {tailoredData.why_company}
+                    </div>
+                  )}
+
+                  {activeTab === 'resume_tweaks' && (
+                    <div className="space-y-3">
+                      {tailoredData.resume_suggestions?.map((sug, idx) => (
+                        <div key={idx} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-1.5 text-xs">
+                          <div className="font-bold text-indigo-300">{sug.section}</div>
+                          <div className="p-2.5 rounded-xl bg-slate-950 text-emerald-300 font-medium border border-slate-800">
+                            " {sug.tailored_recommendation} "
+                          </div>
+                          <div className="text-[11px] text-slate-400">{sug.reason}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeTab === 'custom_answers' && (
+                    <div className="space-y-3">
+                      {Object.entries(tailoredData.custom_answers || {}).map(([q, a], idx) => (
+                        <div key={idx} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1.5 text-xs">
+                          <div className="font-bold text-indigo-400">Q: {q}</div>
+                          <p className="text-slate-200 leading-relaxed">{a}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 5. KANBAN TRACKER VIEW ---
+    function TrackerView({ applications, onRefresh, notify, onPrepInterview, onTailorJob }) {
+      const stages = [
+        { id: 'saved', label: 'Saved' },
+        { id: 'applied', label: 'Applied' },
+        { id: 'assessment', label: 'Assessment' },
+        { id: 'interview', label: 'Interview' },
+        { id: 'selected', label: 'Selected / Offer' },
+        { id: 'rejected', label: 'Rejected' },
+      ];
+
+      const changeStage = async (id, status) => {
+        try {
+          await api.put(`/applications/${id}`, { status });
+          notify(`Application moved to ${status.toUpperCase()}`, 'success');
+          onRefresh();
+        } catch (err) {
+          notify('Error: ' + err.message, 'error');
+        }
+      };
+
+      const deleteApp = async (id) => {
+        try {
+          await api.delete(`/applications/${id}`);
+          notify('Application deleted', 'info');
+          onRefresh();
+        } catch (err) {
+          notify('Error: ' + err.message, 'error');
+        }
+      };
+
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">📋 Application Kanban Pipeline</h1>
+            <p className="text-xs text-slate-400">Track and manage your internship applications across all stages.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
+            {stages.map(stage => {
+              const list = applications.filter(a => a.status === stage.id);
+              return (
+                <div key={stage.id} className="rounded-3xl p-4 bg-slate-900/50 border border-slate-800 flex flex-col justify-between min-h-[480px]">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-xs uppercase text-slate-300">{stage.label}</span>
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-[10px] font-bold flex items-center justify-center text-slate-400">
+                        {list.length}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {list.map(app => (
+                        <div key={app.id} className="glass-panel p-3.5 rounded-2xl border border-slate-800 space-y-2 text-xs">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-bold text-white line-clamp-1">{app.internship?.title}</div>
+                              <div className="text-[11px] text-indigo-400 font-semibold">{app.internship?.company}</div>
+                            </div>
+                            <button onClick={() => deleteApp(app.id)} className="text-slate-600 hover:text-rose-400">✕</button>
+                          </div>
+
+                          <div className="text-[10px] text-slate-400">
+                            Fit Score: <strong className="text-emerald-400">{Math.round(app.match_score)}%</strong>
+                          </div>
+
+                          <select
+                            value={app.status}
+                            onChange={e => changeStage(app.id, e.target.value)}
+                            className="w-full text-[10px] p-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-200"
+                          >
+                            {stages.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                          </select>
+
+                          {stage.id === 'interview' && (
+                            <button
+                              onClick={() => onPrepInterview(app.internship)}
+                              className="w-full py-1 rounded-lg bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30"
+                            >
+                              🎙️ Practice Mock AI
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // --- 6. MOCK INTERVIEW VIEW ---
+    function InterviewView({ selectedJob, allJobs, setSelectedJob, profile, notify }) {
+      const [prepKit, setPrepKit] = useState(null);
+      const [sessionId, setSessionId] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [inputMsg, setInputMsg] = useState('');
+      const [isSending, setIsSending] = useState(false);
+      const chatEndRef = useRef(null);
+
+      useEffect(() => {
+        if (selectedJob) initInterview();
+      }, [selectedJob?.id]);
+
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages]);
+
+      const initInterview = async () => {
+        if (!selectedJob) return;
+        try {
+          const kit = (await api.get(`/interview/prep/${selectedJob.id}`)).data;
+          setPrepKit(kit);
+          const sess = (await api.post(`/interview/session/start/${selectedJob.id}`)).data;
+          setSessionId(sess.session_id);
+          setMessages([{ id: 1, sender: 'ai', content: sess.initial_message }]);
+        } catch (err) {
+          notify('Error starting interview: ' + err.message, 'error');
+        }
+      };
+
+      const handleSend = async (e) => {
+        e.preventDefault();
+        if (!inputMsg.trim() || !sessionId || isSending) return;
+
+        const text = inputMsg.trim();
+        setInputMsg('');
+        setMessages(prev => [...prev, { id: Date.now(), sender: 'user', content: text }]);
+        setIsSending(true);
+
+        try {
+          const res = (await api.post('/interview/chat', { session_id: sessionId, user_message: text })).data;
+          setMessages(prev => [
+            ...prev,
+            { id: Date.now() + 1, sender: 'ai', content: res.ai_response }
+          ]);
+        } catch (err) {
+          notify('Chat error: ' + err.message, 'error');
+        } finally {
+          setIsSending(false);
+        }
+      };
+
+      if (!selectedJob) return <div className="p-12 text-center text-slate-400">Select an internship to practice interview questions.</div>;
+
+      return (
+        <div className="space-y-6 max-w-6xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">🎙️ Mock Interview & Prep Arena</h1>
+              <p className="text-xs text-slate-400">Practice role-specific questions with real-time AI scoring and STAR method evaluation.</p>
+            </div>
+            <select
+              value={selectedJob.id}
+              onChange={e => {
+                const j = allJobs.find(x => x.id === parseInt(e.target.value));
+                if (j) setSelectedJob(j);
+              }}
+              className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-200"
+            >
+              {allJobs.map(j => <option key={j.id} value={j.id}>{j.company} — {j.title}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Question Catalog */}
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <h2 className="text-xs font-bold text-white uppercase tracking-wider">Target Role Question Bank</h2>
+              <div className="space-y-3">
+                {prepKit?.questions?.map((q, idx) => (
+                  <div key={idx} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 space-y-1 text-xs">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase">{q.category}</span>
+                    <div className="font-semibold text-slate-200">{q.question}</div>
+                    <div className="text-[11px] text-slate-400 italic">💡 {q.context_or_tip}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Interactive Chat Arena */}
+            <div className="lg:col-span-2 glass-panel p-5 rounded-3xl border border-slate-800 flex flex-col h-[600px] justify-between">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-800 text-xs">
+                <div className="font-bold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  AI Senior Hiring Manager ({selectedJob.company})
+                </div>
+                <button onClick={initInterview} className="text-indigo-400 hover:text-indigo-300 font-semibold">
+                  ↻ Restart Interview
+                </button>
+              </div>
+
+              {/* Chat Message Scroll */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((m, idx) => (
+                  <div key={idx} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed ${
+                      m.sender === 'user'
+                        ? 'bg-indigo-600/30 border border-indigo-500/40 text-slate-100'
+                        : 'bg-slate-900 border border-slate-800 text-slate-200 whitespace-pre-wrap'
+                    }`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+                {isSending && (
+                  <div className="text-xs text-indigo-400 font-bold p-2 animate-pulse">
+                    Evaluating answer with STAR rubric & preparing next question...
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Chat Input Box */}
+              <form onSubmit={handleSend} className="pt-3 border-t border-slate-800 flex gap-2">
+                <input
+                  type="text"
+                  value={inputMsg}
+                  onChange={e => setInputMsg(e.target.value)}
+                  placeholder="Type your interview answer (use STAR format)..."
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isSending || !inputMsg.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-indigo-600/30"
+                >
+                  Send Answer
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

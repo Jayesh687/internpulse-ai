@@ -1,0 +1,8 @@
+{
+  "liveServer.settings.root": "frontend/dist",
+  "liveServer.settings.CustomBrowser": "chrome",
+  "liveServer.settings.port": 5500,
+  "terminal.integrated.env.windows": {
+    "Path": "${env:Path};C:\\Program Files\\Git\\cmd"
+  }
+}
